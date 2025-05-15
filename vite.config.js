@@ -23,6 +23,7 @@ module.exports = {
    alias: {
     '@': resolve('./src')
   }
+  
  },
  build: {
    outDir: resolve('./src/dist'),
