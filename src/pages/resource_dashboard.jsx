@@ -10,8 +10,10 @@ const Resource_dashboard = () => {
   const [selectedResource, setSelectedResource] = useState(null);
   const [maximized, setMaximized] = useState(null);
 
-  const toggleMaximize = (box) => {
-    setMaximized(maximized === box ? null : box);
+  const [maximizedIndex, setMaximizedIndex] = useState(null);
+
+  const handleMaximize = (index) => {
+    setMaximizedIndex(maximizedIndex === index ? null : index);
   };
   const toggleDropdown = (index) => {
     setOpenDropdown(openDropdown === index ? null : index);
@@ -52,7 +54,23 @@ const Resource_dashboard = () => {
   useEffect(() => {
     fetchResources();
   }, []);
+  //fetch scan results
+const [scanResults, setScanResults] = useState(null);
 
+const fetchScanResults = async () => {
+  try {
+    const res = await axios.get("/api/scan/");
+    console.log("Fetched Scan Results:", res.data.scan_results);
+    setScanResults(res.data.scan_results);
+  } catch (error) {
+    console.error("Error fetching scan results:", error);
+  }
+};
+
+// Automatically fetch scan results when scan tab is selected
+useEffect(() => {
+  fetchScanResults();
+}, []);
   return (
     <div className="bg-gray-100 min-h-screen p-8">
       {/* Title Section */}
@@ -148,122 +166,73 @@ const Resource_dashboard = () => {
           ))}
         </div>
       ) : (
-        <div className="text-xl text-gray-800">
-          {selectedPlugin && selectedResource ? (
-             <><h1 className="text-sm font-light pb-2">
-                Scanning Resource: <strong>{selectedResource.hostname}</strong> with Plugin: <strong>{selectedPlugin.name}</strong>
+     // Scan Result Section
+ <div>
+      <h2 className="text-2xl font-light mb-4">Scan Results</h2>
+      {scanResults ? (
+        <div
+          className={`grid ${maximizedIndex === null ? "grid-cols-1 md:grid-cols-3 gap-4" : "grid-cols-1"} transition-all duration-300`}
+        >
+          {scanResults.map((screen, index) => (
+            <div
+              key={index}
+              className={`relative bg-white p-4 rounded-lg shadow-lg border transition-all duration-300 ${
+                maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
+              } ${maximizedIndex === index ? "w-full" : ""}`}
+            >
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xl font-medium">{screen.screen_name}</h3>
+                <button
+                  onClick={() => handleMaximize(index)}
+                  className="text-sm text-blue-500 underline"
+                >
+                  {maximizedIndex === index ? "Minimize" : "Maximize"}
+                </button>
+              </div>
 
-              </h1><div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Directory List Box */}
-                    {(maximized === null || maximized === "directory") && (
-                      <div className={`${maximized === "directory" ? "col-span-2 h-1/1" : "h-40"} bg-white p-4 shadow-md relative flex flex-col`}>
-                        <div className="flex justify-between items-center mb-2 border-b-4 pb-2 border-gray-100">
-                          <h2 className="font-semibold">Command Execution</h2>
-                          <button
-                            className="text-sm text-grey-600"
-                            onClick={() => toggleMaximize("directory")}
-                          >
-                            {maximized === "directory" ? "Minimize" : "Maximize"}
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] border border-gray-200 rounded p-2">
-                          <h1 className="text-sm font-light whitespace-pre-wrap break-words"> 
-                            ...
-                          </h1>
-                        </div>
-                      </div>
-                    )}
-                    {/* Directory List Box */}
-                    {(maximized === null || maximized === "directory") && (
-                      <div className={`${maximized === "directory" ? "col-span-2 h-1/1" : "h-40"} bg-white p-4 shadow-md relative flex flex-col`}>
-                        <div className="flex justify-between items-center mb-2 border-b-4 pb-2 border-gray-100">
-                          <h2 className="font-thin text-blue-600">Report <strong>{selectedResource.ip_address}</strong></h2>
-                          <button
-                            className="text-sm text-grey-600"
-                            onClick={() => toggleMaximize("directory")}
-                          >
-                            {maximized === "directory" ? "Minimize" : "Maximize"}
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] rounded p-2">
-                       <table className="min-w-full bg-white border">
-                        <thead>
-                          <tr className="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
-                            <th className="py-3 px-6 text-left">IP Address</th>
-                            <th className="py-3 px-6 text-left">Port</th>
-                            <th className="py-3 px-6 text-left">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-gray-600 text-sm font-light">
-                          {resources.map((resource, index) => (
-                            <tr
-                              key={index}
-                              className="border-b border-gray-200 hover:bg-gray-100"
-                            >
-                              <td className="py-3 px-6">{resource.ip_address}</td>
-                              <td className="py-3 px-6">{resource.port}</td>
-                              <td
-                                className={`py-3 px-6 font-semibold ${
-                                  resource.status === "Online"
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
-                              >
-                                {resource.status}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                        </div>
-                      </div>
-                    )}
-                     {/* Directory List Box */}
-                    {(maximized === null || maximized === "directory") && (
-                      <div className={`${maximized === "directory" ? "col-span-2 h-1/1" : "h-40"} bg-white p-4 shadow-md relative flex flex-col`}>
-                        <div className="flex justify-between items-center mb-2 border-b-4 pb-2 border-gray-100">
-                          <h2 className="font-light text-blue-600">Summary</h2>
-                          <button
-                            className="text-sm text-grey-600"
-                            onClick={() => toggleMaximize("directory")}
-                          >
-                            {maximized === "directory" ? "Minimize" : "Maximize"}
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] border border-gray-200 rounded p-2">
-                          <h1 className="text-sm font-light whitespace-pre-wrap break-words"> 
-                            ...
-                          </h1>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Directory List Box */}
-                    {(maximized === null || maximized === "directory") && (
-                      <div className={`${maximized === "directory" ? "col-span-2 h-1/1" : "h-40"} bg-white p-4 shadow-md relative flex flex-col`}>
-                        <div className="flex justify-between items-center mb-2 border-b-4 pb-2 border-gray-100">
-                          <h2 className="text-base font-bold ">Details about <strong className="text-lg font-light text-blue-600">{selectedResource.ip_address}</strong></h2>
-                          <button
-                            className="text-sm text-grey-600"
-                            onClick={() => toggleMaximize("directory")}
-                          >
-                            {maximized === "directory" ? "Minimize" : "Maximize"}
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto max-h-[400px] rounded p-2">
-                          <h1 className="text-sm font-light whitespace-pre-wrap break-words"> 
-                            ...
-                          </h1>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div></>
-          ) : (
-            <p>You have to choose a Plugin from the dropdown of each resource first.</p>
-          )}
+              <div
+                className={`${
+                  maximizedIndex === null ? "max-h-48 overflow-y-auto" : "max-h-full overflow-y-visible"
+                }`}
+              >
+                {screen.is_table ? (
+                  <table className="min-w-full text-sm text-left text-gray-500 mt-2 border">
+                    <thead className="bg-gray-200 sticky top-0">
+                      <tr>
+                        {screen.content[0].map((col, idx) => (
+                          <th key={idx} className="px-4 py-2">{col.replace(/"/g, "")}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {screen.content.slice(1).map((row, rowIndex) => (
+                        <tr key={rowIndex} className="bg-white border-b">
+                          {typeof row === "string" ? (
+                            row.split(/\s+/).map((cell, cellIndex) => (
+                              <td key={cellIndex} className="px-4 py-2">{cell}</td>
+                            ))
+                          ) : (
+                            row.map((cell, cellIndex) => (
+                              <td key={cellIndex} className="px-4 py-2">{cell.replace(/"/g, "")}</td>
+                            ))
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <pre className="mt-2 whitespace-pre-wrap">{screen.content.join("\n")}</pre>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
+      ) : (
+        <p className="text-gray-600">Loading scan results...</p>
+      )}
+    </div>
+
+     //end of scan result section
       )}
     </div>
   );
