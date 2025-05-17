@@ -216,9 +216,16 @@ def plugins_handler(request):
 
 @csrf_exempt
 def plugin_result(request):
-    if request.method == "GET":
-        manager = PluginManager()
-        plugin_result = manager.execute_plugin()
-        return JsonResponse({"scan_results": plugin_result})
-    else:
-        return JsonResponse({"error": "Invalid request method."}, status=405)
+    manager = PluginManager()
+    screens = manager.execute_plugin()
+
+    # Prepare the result for JSON response
+    scan_results = []
+    for index, screen in enumerate(screens):
+        scan_results.append({
+            "screen_name": screen.get("screen_name", f"Screen {index + 1}"),
+            "is_table": screen.get("is_table", False),
+            "content": screen.get("content", [])
+        })
+
+    return JsonResponse({"scan_results": scan_results})
