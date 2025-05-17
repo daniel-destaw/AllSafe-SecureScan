@@ -3,7 +3,7 @@ import os
 import socket
 import paramiko
 from django.http import JsonResponse
-
+from .plugin_manager import PluginManager 
 from .models import Resource
 from inertia import inertia
 from django.views.decorators.csrf import csrf_exempt
@@ -213,6 +213,37 @@ def plugins_handler(request):
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
+@csrf_exempt
+def execute_plugin_view(request):
+    if request.method == "POST":
+        try:
+            manager = PluginManager()
+            manager.execute_plugin()  # This executes the plugin
 
+            # Extracting raw result from the PluginManager
+            screens = getattr(manager, 'screens', {})
 
-#minun lebsh lmtalsh kdlfmun
+            if not screens:
+                return JsonResponse({"error": "No plugin output found."}, status=400)
+
+            # Convert the screen data to a clean JSON structure for the frontend
+            formatted_screens = {}
+            for screen_name, data in screens.items():
+                if data["columns"]:
+                    formatted_screens[screen_name] = {
+                        "type": "table",
+                        "columns": data["columns"],
+                        "rows": data["rows"],
+                    }
+                else:
+                    formatted_screens[screen_name] = {
+                        "type": "text",
+                        "content": data["rows"]
+                    }
+
+            return JsonResponse({"screens": formatted_screens}, status=200)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Only POST method is allowed."}, status=405)

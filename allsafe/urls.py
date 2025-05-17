@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from .views import (
     index, plugins_handler, resource_dashboard, management, resource, users,
-    save_resource, get_resources, delete_resource,
+    save_resource, get_resources, delete_resource,execute_plugin_view,
 )
 from allsafe import views
 
@@ -19,6 +19,8 @@ urlpatterns = [
     path('api/resources/', save_resource, name='save_resource'),
     path('api/resources/list/', get_resources, name='get_resources'),
     path('api/resources/delete/', delete_resource, name='delete_resource'),
+    path('execute_plugin/', execute_plugin_view, name='execute_plugin'),
+    
 
     # Compliance API endpoints
 ]
