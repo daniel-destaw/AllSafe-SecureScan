@@ -1,12 +1,15 @@
 from plugin_manager import PluginManager
 
-# Initialize PluginManager
 manager = PluginManager()
+plugin_name = "LinuxScript_TCP"
 
-# Execute plugin and get parsed screens
-manager.execute_plugin("LinuxScript_TCP")
+# Execute plugin
+manager.execute_plugin(plugin_name)
 
-# Example: Accessing specific table values
+# Save result to JSON
+manager.save_to_json(plugin_name)
+
+# Optional: Accessing specific values
 print("\n=== Accessing Specific Table Values ===")
 try:
     value = manager.get_table_value(0, 0, 0)
