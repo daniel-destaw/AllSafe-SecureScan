@@ -1,9 +1,58 @@
 #!/bin/bash
-DEFAULT_ROUTE=$(ip route show default | awk '/default/ {print $3}')
-ping -c 5 $DEFAULT_ROUTE>ping.txt
-ifconfig>ipconfig.txt
-nmap --privileged -n -Pn -sS --max-retries 3 --min-rtt-timeout 500ms --max-rtt-timeout 3000ms --initial-rtt-timeout 500ms --defeat-rst-ratelimit --min-rate 450 --max-rate 5000 --disable-arp-ping -v -oA Nmap_TCP_10.57.6.0_24 10.57.6.0/24
 
-nmap --privileged -n -Pn -sS --max-retries 3 --min-rtt-timeout 500ms --max-rtt-timeout 3000ms --initial-rtt-timeout 500ms --defeat-rst-ratelimit --min-rate 450 --max-rate 5000 --disable-arp-ping -v -oA Nmap_TCP_10.195.5.0_24 10.195.5.0/24
+@-
+display-mode="1"
+screen_name="TCP Port Scan Result"
+table_columns="IP Address, Port, Status"
+$
+echo "10.195.130.1 80 Open"
+echo "10.195.130.2 22 Closed"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.2 8080 Closed"
+echo "10.195.130.1 80 Open"
+echo "10.195.130.2 22 Closed"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.2 8080 Closed"
+echo "10.195.130.1 80 Open"
+echo "10.195.130.2 22 Closed"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.2 8080 Closed"
+echo "10.195.130.1 80 Open"
+echo "10.195.130.2 22 Closed"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.1 443 Open"
+echo "10.57.6.2 8080 Closed"
 
-printf "Scanning Completed\n"
+$
+-@
+
+@-
+# Second Screen: Summary
+display-mode="1"
+screen_name="Daniel"
+table_columns="total, open, close"
+$
+ip_address=$(hostname -I | awk '{print $1}')
+echo "$ip_address 45 100"
+$
+-@
+@-
+# Third Screen: Server Details
+display-mode="1"
+screen_name="Details About Server"
+table_columns="cpu, ram, ipaddress"
+$
+echo "98% 45% 10.0.0.0"
+$
+-@
+@-
+display-mode="2"
+# Fourth Screen: Owner Information (Non-Table)
+screen_name="Owner"
+$
+echo "this data is to present without table format as just row"
+$
+-@

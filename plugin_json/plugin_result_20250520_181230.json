@@ -1,0 +1,23 @@
+[
+    {
+        "screen_name": "Local Execution Result",
+        "display_mode": "1",
+        "content": [
+            [
+                "Output"
+            ],
+            [
+                "10.195.130.1"
+            ],
+            [
+                "10.195.130.2"
+            ],
+            [
+                "this"
+            ]
+        ],
+        "columns": [
+            "Output"
+        ]
+    }
+]

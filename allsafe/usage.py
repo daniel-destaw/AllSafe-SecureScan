@@ -4,7 +4,7 @@ from plugin_manager import PluginManager
 manager = PluginManager()
 
 # Execute plugin and get parsed screens
-manager.execute_plugin()
+manager.execute_plugin("LinuxScript_TCP")
 
 # Example: Accessing specific table values
 print("\n=== Accessing Specific Table Values ===")
