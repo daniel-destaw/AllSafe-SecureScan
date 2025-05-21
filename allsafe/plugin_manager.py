@@ -1,10 +1,13 @@
 import os
-import subprocess
 import json
 from datetime import datetime
+import subprocess
+import paramiko
+
 
 PLUGIN_DIR = os.path.join(os.path.dirname(__file__), "../custom_plugins")
 JSON_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "plugin_json")
+
 
 class PluginManager:
     def __init__(self):
@@ -12,8 +15,7 @@ class PluginManager:
 
     def execute_plugin(self, plugin_name):
         """
-        Executes a plugin script by name (e.g., 'LinuxScript_TCP')
-        Looks for '<plugin_name>.sh' in PLUGIN_DIR.
+        Executes a local plugin script by name.
         """
         plugin_filename = f"{plugin_name}.sh"
         plugin_path = os.path.join(PLUGIN_DIR, plugin_filename)
@@ -22,7 +24,7 @@ class PluginManager:
             print(f"Plugin '{plugin_name}' not found at {plugin_path}")
             return {"error": f"Plugin '{plugin_name}' not found."}
 
-        print(f"\n=== Executing Plugin: {plugin_path} ===\n")
+        print(f"\n=== Executing Local Plugin: {plugin_path} ===\n")
 
         try:
             with open(plugin_path, "r") as file:
@@ -38,10 +40,109 @@ class PluginManager:
         else:
             print("Error: No output from plugin.")
             return {"error": "No output from plugin."}
+    def execute_plugin_remotely(self, plugin_name, host, username, password):
+        """
+        Executes plugin commands remotely but uses local parsing logic.
+        Only sends $...$ block commands to remote server.
+        Ensures output matches local behavior exactly.
+        """
+        plugin_filename = f"{plugin_name}.sh"
+        plugin_path = os.path.join(PLUGIN_DIR, plugin_filename)
+
+        if not os.path.isfile(plugin_path):
+            print(f"Plugin '{plugin_name}' not found locally at {plugin_path}")
+            return {"error": f"Plugin '{plugin_name}' not found locally."}
+
+        print(f"\n=== Parsing Plugin Locally: {plugin_path} ===\n")
+
+        try:
+            with open(plugin_path, "r") as file:
+                raw_script = file.read()
+        except Exception as e:
+            print(f"Error reading plugin file: {e}")
+            return {"error": "Could not read plugin file"}
+
+        # Parse the plugin structure locally
+        self.screens = self.parse_output(raw_script.strip())
+
+        # Extract all commands inside $...$ blocks
+        screen_command_map = []
+        for idx, screen in enumerate(self.screens):
+            if screen.get("commands"):
+                screen_command_map.append({
+                    "screen_index": idx,
+                    "commands": screen["commands"]
+                })
+
+        if not screen_command_map:
+            print("No commands to execute remotely.")
+            return self.screens
+
+        # Now connect to remote host and execute all commands
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+            ssh.connect(
+                hostname=host,
+                username=username,
+                password=password
+            )
+        except Exception as e:
+            print(f"SSH connection failed: {e}")
+            return {"error": "SSH connection failed"}
+
+        print("\n=== Running Commands Remotely ===\n")
+
+        # Run each command and capture output
+        command_outputs = []
+
+        for screen_info in screen_command_map:
+            for cmd in screen_info["commands"]:
+                stdin, stdout, stderr = ssh.exec_command(cmd)
+                out = stdout.read().decode().strip()
+                err = stderr.read().decode().strip()
+
+                if err:
+                    print(f"[Remote Error] {err}")
+                    command_outputs.append(["[ERROR] " + err])
+                else:
+                    # Split multi-line output into separate rows
+                    lines = [line.strip() for line in out.splitlines() if line.strip()]
+                    command_outputs.append(lines)
+
+        ssh.close()
+
+        # Inject remote output into screens
+        output_index = 0
+        for screen_info in screen_command_map:
+            screen_idx = screen_info["screen_index"]
+            screen = self.screens[screen_idx]
+
+            new_content = []
+            for item in screen["content"]:
+                if isinstance(item, str) and item == "$CMD_OUTPUT":
+                    # Replace with actual command output
+                    for line in command_outputs[output_index]:
+                        new_content.append(line)
+                    output_index += 1
+                else:
+                    new_content.append(item)
+
+            screen["content"] = new_content
+
+        # Remove any 'commands' key from final output
+        for screen in self.screens:
+            if "commands" in screen:
+                del screen["commands"]
+
+        self.display_screens(self.screens)
+        return self.screens
 
     def parse_output(self, raw_output):
         """
         Parses raw plugin output into structured screens.
+        Also extracts $...$ commands for remote execution.
         """
         screens = []
         lines = raw_output.splitlines()
@@ -55,12 +156,18 @@ class PluginManager:
             if line == "@-":
                 if current_screen:
                     screens.append(current_screen)
-                current_screen = {"screen_name": "", "is_table": False, "content": []}
+                current_screen = {
+                    "screen_name": "",
+                    "is_table": False,
+                    "content": [],
+                    "commands": []
+                }
 
             elif line == "-@" and current_screen:
                 if command_buffer:
-                    command_output = self.execute_commands(command_buffer)
-                    current_screen["content"].extend(command_output)
+                    for cmd in command_buffer:
+                        current_screen["commands"].append(cmd)
+                        current_screen["content"].append("$CMD_OUTPUT")
                     command_buffer.clear()
                 screens.append(current_screen)
                 current_screen = None
@@ -85,31 +192,12 @@ class PluginManager:
 
         if current_screen:
             if command_buffer:
-                command_output = self.execute_commands(command_buffer)
-                current_screen["content"].extend(command_output)
+                for cmd in command_buffer:
+                    current_screen["commands"].append(cmd)
+                    current_screen["content"].append("$CMD_OUTPUT")
             screens.append(current_screen)
 
         return screens
-
-    def execute_commands(self, commands):
-        """
-        Executes shell commands inside $ blocks and returns output.
-        """
-        result = []
-        for command in commands:
-            process = subprocess.Popen(
-                command,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            output, error = process.communicate()
-            if error:
-                print(f"Command Error: {error.strip()}")
-            else:
-                result.extend(output.strip().splitlines())
-        return result
 
     def display_screens(self, screens):
         """
