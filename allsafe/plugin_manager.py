@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime
-import subprocess
 import paramiko
 
 
@@ -13,38 +12,10 @@ class PluginManager:
     def __init__(self):
         self.screens = []  # Store parsed screens for later access
 
-    def execute_plugin(self, plugin_name):
-        """
-        Executes a local plugin script by name.
-        """
-        plugin_filename = f"{plugin_name}.sh"
-        plugin_path = os.path.join(PLUGIN_DIR, plugin_filename)
-
-        if not os.path.isfile(plugin_path):
-            print(f"Plugin '{plugin_name}' not found at {plugin_path}")
-            return {"error": f"Plugin '{plugin_name}' not found."}
-
-        print(f"\n=== Executing Local Plugin: {plugin_path} ===\n")
-
-        try:
-            with open(plugin_path, "r") as file:
-                raw_output = file.read()
-        except Exception as e:
-            print(f"Error reading plugin file: {e}")
-            return {"error": "Could not read plugin file"}
-
-        if raw_output:
-            self.screens = self.parse_output(raw_output.strip())
-            self.display_screens(self.screens)
-            return self.screens
-        else:
-            print("Error: No output from plugin.")
-            return {"error": "No output from plugin."}
     def execute_plugin_remotely(self, plugin_name, host, username, password):
         """
-        Executes plugin commands remotely but uses local parsing logic.
-        Only sends $...$ block commands to remote server.
-        Ensures output matches local behavior exactly.
+        Executes plugin commands remotely.
+        Fully supports multi-line scripts and variables.
         """
         plugin_filename = f"{plugin_name}.sh"
         plugin_path = os.path.join(PLUGIN_DIR, plugin_filename)
@@ -63,7 +34,7 @@ class PluginManager:
             return {"error": "Could not read plugin file"}
 
         # Parse the plugin structure locally
-        self.screens = self.parse_output(raw_script.strip())
+        self.screens = self.parse_output(raw_script)
 
         # Extract all commands inside $...$ blocks
         screen_command_map = []
@@ -78,7 +49,7 @@ class PluginManager:
             print("No commands to execute remotely.")
             return self.screens
 
-        # Now connect to remote host and execute all commands
+        # Connect to remote host
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -94,22 +65,21 @@ class PluginManager:
 
         print("\n=== Running Commands Remotely ===\n")
 
-        # Run each command and capture output
+        # Run each command block and capture output
         command_outputs = []
-
+        
         for screen_info in screen_command_map:
-            for cmd in screen_info["commands"]:
-                stdin, stdout, stderr = ssh.exec_command(cmd)
-                out = stdout.read().decode().strip()
-                err = stderr.read().decode().strip()
+            # Combine all commands in this screen into one script
+            combined_script = "\n".join(screen_info["commands"])
+            out, err = self.run_remote_shell_script(ssh, combined_script)
 
-                if err:
-                    print(f"[Remote Error] {err}")
-                    command_outputs.append(["[ERROR] " + err])
-                else:
-                    # Split multi-line output into separate rows
-                    lines = [line.strip() for line in out.splitlines() if line.strip()]
-                    command_outputs.append(lines)
+            if err:
+                print(f"[Remote Error] {err}")
+                command_outputs.append([f"[ERROR] {err}"])
+            else:
+                # Split output by command (assuming each command produces output)
+                lines = [line.strip() for line in out.splitlines() if line.strip()]
+                command_outputs.append(lines)
 
         ssh.close()
 
@@ -122,10 +92,10 @@ class PluginManager:
             new_content = []
             for item in screen["content"]:
                 if isinstance(item, str) and item == "$CMD_OUTPUT":
-                    # Replace with actual command output
-                    for line in command_outputs[output_index]:
-                        new_content.append(line)
-                    output_index += 1
+                    if output_index < len(command_outputs):
+                        for line in command_outputs[output_index]:
+                            new_content.append(line)
+                        output_index += 1
                 else:
                     new_content.append(item)
 
@@ -139,10 +109,31 @@ class PluginManager:
         self.display_screens(self.screens)
         return self.screens
 
+    def run_remote_shell_script(self, ssh, script):
+        """
+        Improved remote script execution that handles variables and multi-line commands.
+        """
+        # Create a temporary script file with proper bash shebang
+        full_command = f"""cat > /tmp/plugin_script.sh <<'PLUGIN_EOF'
+#!/bin/bash
+{script}
+PLUGIN_EOF
+
+chmod +x /tmp/plugin_script.sh
+# Capture both stdout and stderr
+/tmp/plugin_script.sh 2>&1
+"""
+
+        stdin, stdout, stderr = ssh.exec_command(full_command)
+        out = stdout.read().decode().strip()
+        err = stderr.read().decode().strip()
+
+        return out, err
+
     def parse_output(self, raw_output):
         """
         Parses raw plugin output into structured screens.
-        Also extracts $...$ commands for remote execution.
+        Improved to better handle command blocks with variables.
         """
         screens = []
         lines = raw_output.splitlines()
@@ -151,7 +142,7 @@ class PluginManager:
         command_buffer = []
 
         for line in lines:
-            line = line.strip()
+            line = line.rstrip()  # Preserve left whitespace
 
             if line == "@-":
                 if current_screen:
@@ -165,9 +156,8 @@ class PluginManager:
 
             elif line == "-@" and current_screen:
                 if command_buffer:
-                    for cmd in command_buffer:
-                        current_screen["commands"].append(cmd)
-                        current_screen["content"].append("$CMD_OUTPUT")
+                    current_screen["commands"].append("\n".join(command_buffer))
+                    current_screen["content"].append("$CMD_OUTPUT")
                     command_buffer.clear()
                 screens.append(current_screen)
                 current_screen = None
@@ -185,16 +175,21 @@ class PluginManager:
                     current_screen["content"].append(columns)
 
                 elif line == "$":
+                    if in_command_block and command_buffer:
+                        current_screen["commands"].append("\n".join(command_buffer))
+                        current_screen["content"].append("$CMD_OUTPUT")
+                        command_buffer = []
                     in_command_block = not in_command_block
 
                 elif in_command_block:
                     command_buffer.append(line)
+                else:
+                    current_screen["content"].append(line)
 
         if current_screen:
             if command_buffer:
-                for cmd in command_buffer:
-                    current_screen["commands"].append(cmd)
-                    current_screen["content"].append("$CMD_OUTPUT")
+                current_screen["commands"].append("\n".join(command_buffer))
+                current_screen["content"].append("$CMD_OUTPUT")
             screens.append(current_screen)
 
         return screens
@@ -239,7 +234,7 @@ class PluginManager:
         Get value from a table screen by indices.
         """
         if not self.screens:
-            raise ValueError("Screens have not been loaded. Run execute_plugin() first.")
+            raise ValueError("Screens have not been loaded. Run execute_plugin_remotely() first.")
 
         screen = self.screens[screen_index]
         if not screen["is_table"]:
