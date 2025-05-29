@@ -10,6 +10,7 @@ const Resource_dashboard = () => {
   const [selectedResource, setSelectedResource] = useState(null);
   const [maximizedIndex, setMaximizedIndex] = useState(null);
   const [scanResults, setScanResults] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleMaximize = (index) => {
     setMaximizedIndex(maximizedIndex === index ? null : index);
@@ -60,165 +61,264 @@ const Resource_dashboard = () => {
     }
   };
 
+  const filteredResources = resources.filter(resource =>
+    resource.hostname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    resource.ip_address.includes(searchQuery)
+  );
+
   useEffect(() => {
     fetchResources();
   }, []);
 
   return (
-    <div className="bg-gray-100 min-h-screen p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-light">Resource</h1>
-        <button className="bg-blue-600 text-white font-thin px-6 py-2 rounded-full">
-          Enroll New Resource
-        </button>
-      </div>
+    <div className="bg-gray-50 min-h-screen p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold text-gray-800">Resource Dashboard</h1>
+            <p className="text-gray-500">Manage and monitor your infrastructure resources</p>
+          </div>
+          <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg shadow-sm transition-colors">
+            Enroll New Resource
+          </button>
+        </div>
 
-      <div className="mb-8">
-        <input
-          type="text"
-          placeholder="Search Resources"
-          className="w-full px-4 py-2 border border-gray-300 bg-gray-200 rounded-md focus:outline-none focus:ring-0"
-        />
-      </div>
+        {/* Search Bar */}
+        <div className="mb-8 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search resources by hostname or IP..."
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
 
-      <div className="mb-8">
-        <ul className="flex gap-8">
-          <li>
-            <button
-              className={`text-lg font-medium ${selectedTab === "all" ? "text-blue-600 underline" : "text-black-700"}`}
-              onClick={() => setSelectedTab("all")}
-            >
-              All Resources
-            </button>
-          </li>
-          <li>
-            <button
-              className={`text-lg font-medium ${selectedTab === "scan" ? "text-blue-600 underline" : "text-black-700"}`}
-              onClick={() => setSelectedTab("scan")}
-            >
-              Scan Result
-            </button>
-          </li>
-        </ul>
-      </div>
-
-      {selectedTab === "all" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {resources.map((res, index) => (
-            <div
-              key={index}
-              className="border-2 border-gray-300 rounded-lg p-6 flex flex-col md:flex-row justify-between items-center gap-4 hover:bg-white transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <img
-                  src="/static/logo/linux.png"
-                  alt="Linux Logo"
-                  className="w-10 h-10 object-contain"
-                />
-                <div className="flex flex-col">
-                  <div className="font-medium text-xl mb-2">{res.hostname}</div>
-                  <div className="text-gray-600 mb-2">IP: {res.ip_address}</div>
-                  <div className="text-blue-500">Server Health and Security: {res.compliance}%</div>
-                </div>
-              </div>
-
-              <div className="relative">
-                <button
-                  onClick={() => toggleDropdown(index)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg focus:outline-none"
-                >
-                  Action
-                </button>
-
-                {openDropdown === index && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-lg shadow-lg z-10">
-                    <ul className="py-2">
-                      {scripts.length > 0 ? (
-                        scripts.map((script, idx) => (
-                          <li
-                            key={idx}
-                            className="px-4 py-2 text-gray-700 hover:bg-gray-100 cursor-pointer"
-                            onClick={() => handlePluginSelect(script, res)}
-                          >
-                            {script.name}
-                          </li>
-                        ))
-                      ) : (
-                        <li className="px-4 py-2 text-gray-700">No scripts available</li>
-                      )}
-                    </ul>
-                  </div>
+        {/* Tabs */}
+        <div className="mb-8 border-b border-gray-200">
+          <ul className="flex gap-6">
+            <li>
+              <button
+                className={`pb-4 px-1 font-medium text-sm ${selectedTab === "all" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setSelectedTab("all")}
+              >
+                All Resources
+                <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                  {resources.length}
+                </span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`pb-4 px-1 font-medium text-sm ${selectedTab === "scan" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setSelectedTab("scan")}
+              >
+                Scan Results
+                {scanResults && (
+                  <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                    {scanResults.length}
+                  </span>
                 )}
-              </div>
-            </div>
-          ))}
+              </button>
+            </li>
+          </ul>
         </div>
-      ) : (
-        <div>
-          <h2 className="text-2xl font-light mb-4">Scan Results</h2>
-          {scanResults ? (
-            <div
-              className={`grid ${maximizedIndex === null ? "grid-cols-1 md:grid-cols-3 gap-4" : "grid-cols-1"} transition-all duration-300`}
-            >
-              {scanResults.map((screen, index) => (
-                <div
-                  key={index}
-                  className={`relative bg-white p-4 rounded-lg shadow-lg border transition-all duration-300 ${
-                    maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
-                  } ${maximizedIndex === index ? "w-full" : ""}`}
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-xl font-medium">{screen.screen_name}</h3>
-                    <button
-                      onClick={() => handleMaximize(index)}
-                      className="text-sm text-blue-500 underline"
-                    >
-                      {maximizedIndex === index ? "Minimize" : "Maximize"}
-                    </button>
-                  </div>
 
-                  <div
-                    className={`${
-                      maximizedIndex === null ? "max-h-48 overflow-y-auto" : "max-h-full overflow-y-visible"
-                    }`}
-                  >
-                    {screen.is_table ? (
-                      <table className="min-w-full text-sm text-left text-gray-500 mt-2 border">
-                        <thead className="bg-gray-200 sticky top-0">
-                          <tr>
-                            {screen.content[0].map((col, idx) => (
-                              <th key={idx} className="px-4 py-2">{col.replace(/"/g, "")}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {screen.content.slice(1).map((row, rowIndex) => (
-                            <tr key={rowIndex} className="bg-white border-b">
-                              {typeof row === "string" ? (
-                                row.split(/\s+/).map((cell, cellIndex) => (
-                                  <td key={cellIndex} className="px-4 py-2">{cell}</td>
-                                ))
-                              ) : (
-                                row.map((cell, cellIndex) => (
-                                  <td key={cellIndex} className="px-4 py-2">{cell.replace(/"/g, "")}</td>
-                                ))
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <pre className="mt-2 whitespace-pre-wrap">{screen.content.join("\n")}</pre>
-                    )}
+        {/* Content Area */}
+        {selectedTab === "all" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredResources.map((res, index) => (
+              <div
+                key={index}
+                className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="bg-blue-100 p-3 rounded-lg">
+                    <img
+                      src="/static/logo/linux.png"
+                      alt="Linux Logo"
+                      className="w-8 h-8 object-contain"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg text-gray-800">{res.hostname}</h3>
+                    <p className="text-gray-500 text-sm mb-1">IP: {res.ip_address}</p>
+                    <div className="flex items-center mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div
+                          className={`h-2.5 rounded-full ${res.compliance > 85 ? 'bg-green-500' : res.compliance > 75 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${res.compliance}%` }}
+                        ></div>
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-700">
+                        {res.compliance}%
+                      </span>
+                    </div>
                   </div>
                 </div>
-              ))}
+
+                <div className="relative">
+                  <button
+                    onClick={() => toggleDropdown(index)}
+                    className="w-full flex justify-between items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 focus:outline-none"
+                  >
+                    <span>Run Action</span>
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {openDropdown === index && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                      <ul className="py-1 text-sm text-gray-700">
+                        {scripts.length > 0 ? (
+                          scripts.map((script, idx) => (
+                            <li
+                              key={idx}
+                              className="px-4 py-2 hover:bg-blue-50 cursor-pointer flex items-center"
+                              onClick={() => handlePluginSelect(script, res)}
+                            >
+                              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              {script.name}
+                            </li>
+                          ))
+                        ) : (
+                          <li className="px-4 py-2 text-gray-500">No scripts available</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Scan Results for {selectedResource?.hostname}
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                IP: {selectedResource?.ip_address} | Plugin: {selectedPlugin?.name}
+              </p>
             </div>
-          ) : (
-            <p className="text-gray-600">Loading scan results...</p>
-          )}
-        </div>
-      )}
+
+            {scanResults ? (
+              <div className={`${maximizedIndex === null ? "p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "p-0"}`}>
+                {scanResults.map((screen, index) => (
+                  <div
+                    key={index}
+                    className={`bg-white ${maximizedIndex === null ? "border border-gray-200 rounded-lg shadow-sm" : "border-0"} ${
+                      maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
+                    } ${maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}
+                  >
+                    <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
+                      <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                          <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {screen.screen_name}
+                        </h3>
+                        <button
+                          onClick={() => handleMaximize(index)}
+                          className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                        >
+                          {maximizedIndex === index ? (
+                            <>
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              Close
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                              </svg>
+                              Expand
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
+                        {screen.is_table ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  {screen.content[0].map((col, idx) => (
+                                    <th
+                                      key={idx}
+                                      scope="col"
+                                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                    >
+                                      {col.replace(/"/g, "")}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {screen.content.slice(1).map((row, rowIndex) => (
+                                  <tr key={rowIndex}>
+                                    {typeof row === "string" ? (
+                                      row.split(/\s+/).map((cell, cellIndex) => (
+                                        <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                          {cell}
+                                        </td>
+                                      ))
+                                    ) : (
+                                      row.map((cell, cellIndex) => (
+                                        <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                          {cell.replace(/"/g, "")}
+                                        </td>
+                                      ))
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
+                              {screen.content.join("\n")}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-12 text-center">
+                <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">No Scan Results</h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  Select a resource and run a plugin to view scan results here.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

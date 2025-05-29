@@ -1,19 +1,24 @@
 import { Link } from "@inertiajs/react";
 
 const Header = () => (
-  <header className="bg-white text-black py-6 px-4 border-b border-gray-200">
-    <nav className="flex justify-between items-center">
-      <div className="flex items-center gap-6">
+  <header className="bg-white text-black shadow-sm">
+    <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div className="flex items-center space-x-10">
         {/* Logo */}
         <Link href="/">
-          <img src="/static/logo/logo.png" alt="Allsafe Logo" className="h-8 pl-24" />
+          <img 
+            src="/static/logo/logo.png" 
+            alt="Allsafe Logo" 
+            className="h-8 transition-transform hover:scale-105" 
+          />
         </Link>
+        
         {/* Navigation Menu */}
-        <ul className="flex gap-4 pl-10">
+        <ul className="flex space-x-6">
           <li>
             <Link
               href="/resource_dashboard"
-              className="font-normal text-lg hover:text-blue-600 px-3 py-1"
+              className="text-gray-700 hover:text-blue-600 font-medium text-lg px-3 py-2 rounded-md transition-colors duration-200 hover:bg-blue-50"
             >
               Resource
             </Link>
@@ -21,14 +26,17 @@ const Header = () => (
           <li>
             <Link
               href="/management"
-              className="font-thin text-lg hover:text-blue-600 px-3 py-1"
+              className="text-gray-700 hover:text-blue-600 font-medium text-lg px-3 py-2 rounded-md transition-colors duration-200 hover:bg-blue-50"
             >
               Management
             </Link>
           </li>
         </ul>
       </div>
-      <div className="font-light">Daniel.Destaw@yahoo.com</div>
+      
+      <div className="text-gray-600 font-medium px-4 py-2 rounded-full bg-gray-100">
+        Daniel.Destaw@yahoo.com
+      </div>
     </nav>
   </header>
 );
