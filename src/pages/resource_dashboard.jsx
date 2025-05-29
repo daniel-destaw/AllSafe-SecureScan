@@ -8,19 +8,18 @@ const Resource_dashboard = () => {
   const [selectedTab, setSelectedTab] = useState("all");
   const [selectedPlugin, setSelectedPlugin] = useState(null);
   const [selectedResource, setSelectedResource] = useState(null);
-  const [maximized, setMaximized] = useState(null);
-
   const [maximizedIndex, setMaximizedIndex] = useState(null);
+  const [scanResults, setScanResults] = useState(null);
 
   const handleMaximize = (index) => {
     setMaximizedIndex(maximizedIndex === index ? null : index);
   };
+
   const toggleDropdown = (index) => {
     setOpenDropdown(openDropdown === index ? null : index);
     if (openDropdown !== index) fetchPlugins();
   };
 
-  // Fetch resources from the backend
   const fetchResources = async () => {
     try {
       const res = await axios.get("/api/resources/list/");
@@ -34,7 +33,6 @@ const Resource_dashboard = () => {
     }
   };
 
-  // Fetch scripts from the backend
   const fetchPlugins = async () => {
     try {
       const res = await axios.get("/api/plugins/");
@@ -44,36 +42,30 @@ const Resource_dashboard = () => {
     }
   };
 
-  // Handle Plugin Selection
-  const handlePluginSelect = (script, resource) => {
+  const handlePluginSelect = async (script, resource) => {
     setSelectedPlugin(script);
     setSelectedResource(resource);
     setSelectedTab("scan");
+
+    try {
+      const res = await axios.post("/api/plugin_result/", {
+        script_name: script.name,
+        resource_ip: resource.ip_address,
+      });
+
+      setScanResults(res.data.scan_results);
+      console.log("Scan results received:", res.data.scan_results);
+    } catch (error) {
+      console.error("Failed to get scan results:", error);
+    }
   };
 
   useEffect(() => {
     fetchResources();
   }, []);
-  //fetch scan results
-const [scanResults, setScanResults] = useState(null);
 
-const fetchScanResults = async () => {
-  try {
-    const res = await axios.get("/api/scan/");
-    console.log("Fetched Scan Results:", res.data.scan_results);
-    setScanResults(res.data.scan_results);
-  } catch (error) {
-    console.error("Error fetching scan results:", error);
-  }
-};
-
-// Automatically fetch scan results when scan tab is selected
-useEffect(() => {
-  fetchScanResults();
-}, []);
   return (
     <div className="bg-gray-100 min-h-screen p-8">
-      {/* Title Section */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-light">Resource</h1>
         <button className="bg-blue-600 text-white font-thin px-6 py-2 rounded-full">
@@ -81,7 +73,6 @@ useEffect(() => {
         </button>
       </div>
 
-      {/* Search Bar Section */}
       <div className="mb-8">
         <input
           type="text"
@@ -90,7 +81,6 @@ useEffect(() => {
         />
       </div>
 
-      {/* Navigation Bar Section */}
       <div className="mb-8">
         <ul className="flex gap-8">
           <li>
@@ -112,7 +102,6 @@ useEffect(() => {
         </ul>
       </div>
 
-      {/* Conditional Rendering */}
       {selectedTab === "all" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {resources.map((res, index) => (
@@ -133,7 +122,6 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Dropdown */}
               <div className="relative">
                 <button
                   onClick={() => toggleDropdown(index)}
@@ -147,8 +135,8 @@ useEffect(() => {
                     <ul className="py-2">
                       {scripts.length > 0 ? (
                         scripts.map((script, idx) => (
-                          <li 
-                            key={idx} 
+                          <li
+                            key={idx}
                             className="px-4 py-2 text-gray-700 hover:bg-gray-100 cursor-pointer"
                             onClick={() => handlePluginSelect(script, res)}
                           >
@@ -166,73 +154,70 @@ useEffect(() => {
           ))}
         </div>
       ) : (
-     // Scan Result Section
- <div>
-      <h2 className="text-2xl font-light mb-4">Scan Results</h2>
-      {scanResults ? (
-        <div
-          className={`grid ${maximizedIndex === null ? "grid-cols-1 md:grid-cols-3 gap-4" : "grid-cols-1"} transition-all duration-300`}
-        >
-          {scanResults.map((screen, index) => (
+        <div>
+          <h2 className="text-2xl font-light mb-4">Scan Results</h2>
+          {scanResults ? (
             <div
-              key={index}
-              className={`relative bg-white p-4 rounded-lg shadow-lg border transition-all duration-300 ${
-                maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
-              } ${maximizedIndex === index ? "w-full" : ""}`}
+              className={`grid ${maximizedIndex === null ? "grid-cols-1 md:grid-cols-3 gap-4" : "grid-cols-1"} transition-all duration-300`}
             >
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-xl font-medium">{screen.screen_name}</h3>
-                <button
-                  onClick={() => handleMaximize(index)}
-                  className="text-sm text-blue-500 underline"
+              {scanResults.map((screen, index) => (
+                <div
+                  key={index}
+                  className={`relative bg-white p-4 rounded-lg shadow-lg border transition-all duration-300 ${
+                    maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
+                  } ${maximizedIndex === index ? "w-full" : ""}`}
                 >
-                  {maximizedIndex === index ? "Minimize" : "Maximize"}
-                </button>
-              </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-xl font-medium">{screen.screen_name}</h3>
+                    <button
+                      onClick={() => handleMaximize(index)}
+                      className="text-sm text-blue-500 underline"
+                    >
+                      {maximizedIndex === index ? "Minimize" : "Maximize"}
+                    </button>
+                  </div>
 
-              <div
-                className={`${
-                  maximizedIndex === null ? "max-h-48 overflow-y-auto" : "max-h-full overflow-y-visible"
-                }`}
-              >
-                {screen.is_table ? (
-                  <table className="min-w-full text-sm text-left text-gray-500 mt-2 border">
-                    <thead className="bg-gray-200 sticky top-0">
-                      <tr>
-                        {screen.content[0].map((col, idx) => (
-                          <th key={idx} className="px-4 py-2">{col.replace(/"/g, "")}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {screen.content.slice(1).map((row, rowIndex) => (
-                        <tr key={rowIndex} className="bg-white border-b">
-                          {typeof row === "string" ? (
-                            row.split(/\s+/).map((cell, cellIndex) => (
-                              <td key={cellIndex} className="px-4 py-2">{cell}</td>
-                            ))
-                          ) : (
-                            row.map((cell, cellIndex) => (
-                              <td key={cellIndex} className="px-4 py-2">{cell.replace(/"/g, "")}</td>
-                            ))
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <pre className="mt-2 whitespace-pre-wrap">{screen.content.join("\n")}</pre>
-                )}
-              </div>
+                  <div
+                    className={`${
+                      maximizedIndex === null ? "max-h-48 overflow-y-auto" : "max-h-full overflow-y-visible"
+                    }`}
+                  >
+                    {screen.is_table ? (
+                      <table className="min-w-full text-sm text-left text-gray-500 mt-2 border">
+                        <thead className="bg-gray-200 sticky top-0">
+                          <tr>
+                            {screen.content[0].map((col, idx) => (
+                              <th key={idx} className="px-4 py-2">{col.replace(/"/g, "")}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {screen.content.slice(1).map((row, rowIndex) => (
+                            <tr key={rowIndex} className="bg-white border-b">
+                              {typeof row === "string" ? (
+                                row.split(/\s+/).map((cell, cellIndex) => (
+                                  <td key={cellIndex} className="px-4 py-2">{cell}</td>
+                                ))
+                              ) : (
+                                row.map((cell, cellIndex) => (
+                                  <td key={cellIndex} className="px-4 py-2">{cell.replace(/"/g, "")}</td>
+                                ))
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <pre className="mt-2 whitespace-pre-wrap">{screen.content.join("\n")}</pre>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            <p className="text-gray-600">Loading scan results...</p>
+          )}
         </div>
-      ) : (
-        <p className="text-gray-600">Loading scan results...</p>
-      )}
-    </div>
-
-     //end of scan result section
       )}
     </div>
   );

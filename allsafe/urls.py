@@ -19,7 +19,7 @@ urlpatterns = [
     path('api/resources/', save_resource, name='save_resource'),
     path('api/resources/list/', get_resources, name='get_resources'),
     path('api/resources/delete/', delete_resource, name='delete_resource'),
-    path('api/scan/', plugin_result, name='plugin_result'),
+    path('api/plugin_result/', plugin_result, name='plugin_result'),
    
     
 

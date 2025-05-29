@@ -1,0 +1,67 @@
+[
+    {
+        "screen_name": "TCP Port Scan Result",
+        "is_table": true,
+        "content": [
+            [
+                "\"IP Address",
+                "Port",
+                "Status\""
+            ],
+            "10.195.130.1 80 Open",
+            "10.195.130.2 22 Closed",
+            "10.57.6.1 443 Open",
+            "10.57.6.1 443 Open",
+            "10.57.6.2 8080 Closed",
+            "10.195.130.1 80 Open",
+            "10.195.130.2 22 Closed",
+            "10.57.6.1 443 Open",
+            "10.57.6.1 443 Open",
+            "10.57.6.2 8080 Closed",
+            "10.195.130.1 80 Open",
+            "10.195.130.2 22 Closed",
+            "10.57.6.1 443 Open",
+            "10.57.6.1 443 Open",
+            "10.57.6.2 8080 Closed",
+            "10.195.130.1 80 Open",
+            "10.195.130.2 22 Closed",
+            "10.57.6.1 443 Open",
+            "10.57.6.1 443 Open",
+            "10.57.6.2 8080 Closed"
+        ]
+    },
+    {
+        "screen_name": "Daniel",
+        "is_table": true,
+        "content": [
+            "# Second Screen: Summary",
+            [
+                "\"total",
+                "open",
+                "close\""
+            ],
+            "10.2.10.78 45 100"
+        ]
+    },
+    {
+        "screen_name": "Details About Server",
+        "is_table": true,
+        "content": [
+            "# Third Screen: Server Details",
+            [
+                "\"cpu",
+                "ram",
+                "ipaddress\""
+            ],
+            "98% 45% 10.0.0.0"
+        ]
+    },
+    {
+        "screen_name": "Owner",
+        "is_table": false,
+        "content": [
+            "# Fourth Screen: Owner Information (Non-Table)",
+            "this data is to present without table format as just row"
+        ]
+    }
+]
