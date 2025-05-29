@@ -30,7 +30,6 @@ $
 -@
 
 @-
-# Second Screen: Summary
 display-mode="1"
 screen_name="Daniel"
 table_columns="total, open, close"
@@ -40,7 +39,6 @@ echo "$ip_address 45 100"
 $
 -@
 @-
-# Third Screen: Server Details
 display-mode="1"
 screen_name="Details About Server"
 table_columns="cpu, ram, ipaddress"
@@ -50,7 +48,6 @@ $
 -@
 @-
 display-mode="2"
-# Fourth Screen: Owner Information (Non-Table)
 screen_name="Owner"
 $
 echo "this data is to present without table format as just row"

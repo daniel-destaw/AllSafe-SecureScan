@@ -435,10 +435,10 @@ def plugin_result(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body)
-            plugin = data.get("script_name")
+            plugin_name = data.get("script_name")
             ip_address = data.get("resource_ip")
 
-            if not plugin or not ip_address:
+            if not plugin_name or not ip_address:
                 return JsonResponse({"error": "Missing script_name or resource_ip"}, status=400)
 
             # Try to get the Resource from the DB
@@ -447,26 +447,51 @@ def plugin_result(request):
             except Resource.DoesNotExist:
                 return JsonResponse({"error": f"No resource found for IP {ip_address}"}, status=404)
 
-            screens = [
-                {
-                    "screen_name": ip_address,
-                    "is_table": True,
-                    "content": [
-                        ["Hostname", "Password"],
-                        [resource.username or "N/A", resource.password],
-                    ]
-                },
-                {
-                    "screen_name": plugin,
-                    "is_table": False,
-                    "content": [
-                        "Outdated software version detected",
-                        "Weak password policy in place",
-                    ]
+            # Initialize PluginManager
+            plugin_manager = PluginManager()
+            
+            # Execute the plugin remotely
+            result = plugin_manager.execute_plugin_remotely(
+                plugin_name=plugin_name[:-3],
+                host=ip_address,
+                username=resource.username,
+                password=resource.password
+            )
+
+            # Check if there was an error
+            if isinstance(result, dict) and "error" in result:
+                return JsonResponse({"error": result["error"]}, status=400)
+
+            # Format the result into the expected screen structure
+            screens = []
+            for screen in result:
+                formatted_screen = {
+                    "screen_name": screen.get("screen_name", ""),
+                    "is_table": screen.get("is_table", False),
+                    "content": []
                 }
-            ]
+
+                # Process content based on whether it's a table or not
+                if formatted_screen["is_table"]:
+                    # For tables, ensure content is a list of lists
+                    for item in screen.get("content", []):
+                        if isinstance(item, list):
+                            formatted_screen["content"].append(item)
+                        else:
+                            # Split non-list items into lists (adjust as needed)
+                            formatted_screen["content"].append(item.split())
+                else:
+                    # For non-tables, ensure content is a list of strings
+                    for item in screen.get("content", []):
+                        if isinstance(item, list):
+                            formatted_screen["content"].append(" ".join(item))
+                        else:
+                            formatted_screen["content"].append(item)
+
+                screens.append(formatted_screen)
 
             return JsonResponse({"scan_results": screens})
+            
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     else:
