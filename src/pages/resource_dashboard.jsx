@@ -6,11 +6,21 @@ const Resource_dashboard = () => {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [scripts, setScripts] = useState([]);
   const [selectedTab, setSelectedTab] = useState("all");
-  const [selectedPlugin, setSelectedPlugin] = useState(null);
-  const [selectedResource, setSelectedResource] = useState(null);
   const [maximizedIndex, setMaximizedIndex] = useState(null);
-  const [scanResults, setScanResults] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Tab management state
+  const [scanTabs, setScanTabs] = useState([]);
+  const [activeTab, setActiveTab] = useState(null);
+  
+  // Refresh intervals
+  const refreshOptions = [
+    { label: "No refresh", value: 0 },
+    { label: "30 seconds", value: 30 },
+    { label: "1 minute", value: 60 },
+    { label: "5 minutes", value: 300 },
+    { label: "10 minutes", value: 600 },
+  ];
 
   const handleMaximize = (index) => {
     setMaximizedIndex(maximizedIndex === index ? null : index);
@@ -43,28 +53,145 @@ const Resource_dashboard = () => {
     }
   };
 
-  const handlePluginSelect = async (script, resource) => {
-    setSelectedPlugin(script);
-    setSelectedResource(resource);
-    setSelectedTab("scan");
-
+  const fetchPluginResults = async (script, resource) => {
     try {
       const res = await axios.post("/api/plugin_result/", {
         script_name: script.name,
         resource_ip: resource.ip_address,
       });
-
-      setScanResults(res.data.scan_results);
-      console.log("Scan results received:", res.data.scan_results);
+      return res.data.scan_results;
     } catch (error) {
       console.error("Failed to get scan results:", error);
+      return null;
     }
+  };
+
+  const handlePluginSelect = async (script, resource) => {
+    const results = await fetchPluginResults(script, resource);
+    if (!results) return;
+
+    const newTab = {
+      id: `${resource.ip_address}-${script.name}-${Date.now()}`,
+      label: `${script.name} (${resource.hostname})`,
+      plugin: script,
+      resource: resource,
+      results: results,
+      pinned: false,
+      refreshInterval: 0,
+      lastRefreshed: new Date().toISOString()
+    };
+
+    setScanTabs(prevTabs => {
+      const existingTabIndex = prevTabs.findIndex(tab => 
+        tab.resource.ip_address === resource.ip_address && 
+        tab.plugin.name === script.name
+      );
+      
+      if (existingTabIndex >= 0) {
+        const updatedTabs = [...prevTabs];
+        updatedTabs[existingTabIndex] = newTab;
+        return updatedTabs;
+      } else {
+        return [...prevTabs, newTab];
+      }
+    });
+
+    setActiveTab(newTab.id);
+    setSelectedTab("scan");
+  };
+
+  const togglePinTab = (tabId, e) => {
+    e?.stopPropagation();
+    setScanTabs(prevTabs =>
+      prevTabs.map(tab =>
+        tab.id === tabId ? { ...tab, pinned: !tab.pinned } : tab
+      )
+    );
+  };
+
+  const setRefreshInterval = (tabId, interval) => {
+    setScanTabs(prevTabs =>
+      prevTabs.map(tab =>
+        tab.id === tabId ? { 
+          ...tab, 
+          refreshInterval: interval,
+          lastRefreshed: new Date().toISOString()
+        } : tab
+      )
+    );
+  };
+
+  const refreshTab = async (tabId) => {
+    const tabIndex = scanTabs.findIndex(tab => tab.id === tabId);
+    if (tabIndex === -1) return;
+
+    const tab = scanTabs[tabIndex];
+    const results = await fetchPluginResults(tab.plugin, tab.resource);
+    if (!results) return;
+
+    setScanTabs(prevTabs =>
+      prevTabs.map(t =>
+        t.id === tabId ? { 
+          ...t, 
+          results: results,
+          lastRefreshed: new Date().toISOString()
+        } : t
+      )
+    );
+  };
+
+  const closeTab = (tabId, e) => {
+    e.stopPropagation();
+    setScanTabs(prevTabs => {
+      const newTabs = prevTabs.filter(tab => tab.id !== tabId);
+      
+      if (tabId === activeTab) {
+        if (newTabs.length > 0) {
+          setActiveTab(newTabs[newTabs.length - 1].id);
+        } else {
+          setActiveTab(null);
+        }
+      }
+      
+      return newTabs;
+    });
+  };
+
+  const closeAllTabs = () => {
+    setScanTabs(prevTabs => {
+      const pinnedTabs = prevTabs.filter(tab => tab.pinned);
+      if (pinnedTabs.length === 0) {
+        setActiveTab(null);
+        setSelectedTab("all");
+      } else if (!pinnedTabs.some(tab => tab.id === activeTab)) {
+        setActiveTab(pinnedTabs[pinnedTabs.length - 1].id);
+      }
+      return pinnedTabs;
+    });
   };
 
   const filteredResources = resources.filter(resource =>
     resource.hostname.toLowerCase().includes(searchQuery.toLowerCase()) ||
     resource.ip_address.includes(searchQuery)
   );
+
+  // Set up interval for refreshing tabs
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      scanTabs.forEach(tab => {
+        if (tab.pinned && tab.refreshInterval > 0) {
+          const lastRefreshed = new Date(tab.lastRefreshed);
+          const secondsSinceLastRefresh = (now - lastRefreshed) / 1000;
+          if (secondsSinceLastRefresh >= tab.refreshInterval) {
+            refreshTab(tab.id);
+          }
+        }
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [scanTabs]);
 
   useEffect(() => {
     fetchResources();
@@ -102,32 +229,113 @@ const Resource_dashboard = () => {
 
         {/* Tabs */}
         <div className="mb-8 border-b border-gray-200">
-          <ul className="flex gap-6">
-            <li>
+          <div className="flex items-center gap-6">
+            <button
+              className={`pb-4 px-1 font-medium text-sm ${selectedTab === "all" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setSelectedTab("all")}
+            >
+              All Resources
+              <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                {resources.length}
+              </span>
+            </button>
+            
+            {scanTabs.map(tab => (
+              <div key={tab.id} className="relative group">
+                <button
+                  className={`pb-4 px-1 font-medium text-sm flex items-center ${selectedTab === "scan" && activeTab === tab.id ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"} ${tab.pinned ? "pl-6" : ""}`}
+                  onClick={() => {
+                    setSelectedTab("scan");
+                    setActiveTab(tab.id);
+                  }}
+                >
+                  {tab.pinned && (
+                    <svg 
+                      className="w-4 h-4 mr-1 text-yellow-500 absolute left-0" 
+                      fill="currentColor" 
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+                    </svg>
+                  )}
+                  {tab.label}
+                  <button 
+                    onClick={(e) => closeTab(tab.id, e)}
+                    className="ml-2 text-gray-400 hover:text-gray-600"
+                    disabled={tab.pinned}
+                  >
+                    ×
+                  </button>
+                </button>
+                <div className="absolute -top-1 -right-1 flex">
+                  {tab.pinned && (
+                    <div className="relative group/refresh">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          refreshTab(tab.id);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-500 z-10"
+                        title={`Last refreshed: ${new Date(tab.lastRefreshed).toLocaleTimeString()}`}
+                      >
+                        <svg 
+                          className={`w-3 h-3 ${tab.refreshInterval > 0 ? "text-blue-500" : "text-gray-400 hover:text-blue-500"}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                      <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-md shadow-lg z-20 hidden group-hover/refresh:block">
+                        <div className="py-1 px-3 text-xs text-gray-500">
+                          Refresh every:
+                        </div>
+                        {refreshOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            className={`block w-full text-left px-4 py-2 text-sm ${tab.refreshInterval === option.value ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100"}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRefreshInterval(tab.id, option.value);
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => togglePinTab(tab.id, e)}
+                    className="p-1 text-gray-400 hover:text-yellow-500 z-10"
+                    title={tab.pinned ? "Unpin tab" : "Pin tab"}
+                  >
+                    <svg 
+                      className={`w-3 h-3 ${tab.pinned ? "text-yellow-500 fill-current" : "text-gray-400 hover:text-yellow-500"}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+            
+            {scanTabs.length > 0 && (
               <button
-                className={`pb-4 px-1 font-medium text-sm ${selectedTab === "all" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-                onClick={() => setSelectedTab("all")}
+                onClick={closeAllTabs}
+                className="ml-auto text-xs text-gray-500 hover:text-gray-700 flex items-center"
               >
-                All Resources
-                <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {resources.length}
-                </span>
+                Close All
+                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
-            </li>
-            <li>
-              <button
-                className={`pb-4 px-1 font-medium text-sm ${selectedTab === "scan" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-                onClick={() => setSelectedTab("scan")}
-              >
-                Scan Results
-                {scanResults && (
-                  <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                    {scanResults.length}
-                  </span>
-                )}
-              </button>
-            </li>
-          </ul>
+            )}
+          </div>
         </div>
 
         {/* Content Area */}
@@ -202,107 +410,146 @@ const Resource_dashboard = () => {
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                Scan Results for {selectedResource?.hostname}
-              </h2>
-              <p className="text-gray-500 text-sm mt-1">
-                IP: {selectedResource?.ip_address} | Plugin: {selectedPlugin?.name}
-              </p>
-            </div>
-
-            {scanResults ? (
-              <div className={`${maximizedIndex === null ? "p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "p-0"}`}>
-                {scanResults.map((screen, index) => (
-                  <div
-                    key={index}
-                    className={`bg-white ${maximizedIndex === null ? "border border-gray-200 rounded-lg shadow-sm" : "border-0"} ${
-                      maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
-                    } ${maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}
-                  >
-                    <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
-                      <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
-                        <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                          <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            {activeTab && scanTabs.length > 0 ? (
+              <>
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                      <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      {scanTabs.find(tab => tab.id === activeTab)?.label}
+                      {scanTabs.find(tab => tab.id === activeTab)?.pinned && (
+                        <>
+                          <svg 
+                            className="w-4 h-4 ml-2 text-yellow-500" 
+                            fill="currentColor" 
+                            viewBox="0 0 20 20"
+                            title="Pinned tab"
+                          >
+                            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
                           </svg>
-                          {screen.screen_name}
-                        </h3>
-                        <button
-                          onClick={() => handleMaximize(index)}
-                          className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                        >
-                          {maximizedIndex === index ? (
-                            <>
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              Close
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                              </svg>
-                              Expand
-                            </>
+                          {scanTabs.find(tab => tab.id === activeTab)?.refreshInterval > 0 && (
+                            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                              Auto-refresh: {refreshOptions.find(opt => opt.value === scanTabs.find(tab => tab.id === activeTab)?.refreshInterval)?.label.replace("No refresh", "Off")}
+                            </span>
                           )}
-                        </button>
-                      </div>
+                        </>
+                      )}
+                    </h2>
+                    <p className="text-gray-500 text-sm mt-1">
+                      IP: {scanTabs.find(tab => tab.id === activeTab)?.resource.ip_address} | 
+                      Plugin: {scanTabs.find(tab => tab.id === activeTab)?.plugin.name} | 
+                      Last refreshed: {new Date(scanTabs.find(tab => tab.id === activeTab)?.lastRefreshed).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  {scanTabs.find(tab => tab.id === activeTab)?.pinned && (
+                    <button
+                      onClick={() => refreshTab(activeTab)}
+                      className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      <svg 
+                        className="w-4 h-4 mr-1" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Refresh Now
+                    </button>
+                  )}
+                </div>
 
-                      <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
-                        {screen.is_table ? (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  {screen.content[0].map((col, idx) => (
-                                    <th
-                                      key={idx}
-                                      scope="col"
-                                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                    >
-                                      {col.replace(/"/g, "")}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {screen.content.slice(1).map((row, rowIndex) => (
-                                  <tr key={rowIndex}>
-                                    {typeof row === "string" ? (
-                                      row.split(/\s+/).map((cell, cellIndex) => (
-                                        <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                          {cell}
-                                        </td>
-                                      ))
-                                    ) : (
-                                      row.map((cell, cellIndex) => (
-                                        <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                          {cell.replace(/"/g, "")}
-                                        </td>
-                                      ))
-                                    )}
+                <div className={`${maximizedIndex === null ? "p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "p-0"}`}>
+                  {scanTabs.find(tab => tab.id === activeTab)?.results.map((screen, index) => (
+                    <div
+                      key={index}
+                      className={`bg-white ${maximizedIndex === null ? "border border-gray-200 rounded-lg shadow-sm" : "border-0"} ${
+                        maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
+                      } ${maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}
+                    >
+                      <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
+                        <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
+                          <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                            <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {screen.screen_name}
+                          </h3>
+                          <button
+                            onClick={() => handleMaximize(index)}
+                            className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                          >
+                            {maximizedIndex === index ? (
+                              <>
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Close
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                                Expand
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
+                          {screen.is_table ? (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    {screen.content[0].map((col, idx) => (
+                                      <th
+                                        key={idx}
+                                        scope="col"
+                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                      >
+                                        {col.replace(/"/g, "")}
+                                      </th>
+                                    ))}
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
-                              {screen.content.join("\n")}
-                            </pre>
-                          </div>
-                        )}
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {screen.content.slice(1).map((row, rowIndex) => (
+                                    <tr key={rowIndex}>
+                                      {typeof row === "string" ? (
+                                        row.split(/\s+/).map((cell, cellIndex) => (
+                                          <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                            {cell}
+                                          </td>
+                                        ))
+                                      ) : (
+                                        row.map((cell, cellIndex) => (
+                                          <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                            {cell.replace(/"/g, "")}
+                                          </td>
+                                        ))
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
+                                {screen.content.join("\n")}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="p-12 text-center">
                 <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
