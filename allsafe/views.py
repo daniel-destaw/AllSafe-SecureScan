@@ -429,7 +429,6 @@ def plugins_handler(request):
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
-
 @csrf_exempt
 def plugin_result(request):
     if request.method == "POST":
@@ -452,7 +451,7 @@ def plugin_result(request):
             
             # Execute the plugin remotely
             result = plugin_manager.execute_plugin_remotely(
-                plugin_name=plugin_name[:-3],
+                plugin_name=plugin_name[:-3],  # Remove `.sh` extension
                 host=ip_address,
                 username=resource.username,
                 password=resource.password
@@ -462,9 +461,12 @@ def plugin_result(request):
             if isinstance(result, dict) and "error" in result:
                 return JsonResponse({"error": result["error"]}, status=400)
 
-            # Format the result into the expected screen structure
-            screens = []
-            for screen in result:
+            # Extract logs and screens
+            logs = result.get("logs", [])
+            screens = result.get("screens", [])
+
+            formatted_screens = []
+            for screen in screens:
                 formatted_screen = {
                     "screen_name": screen.get("screen_name", ""),
                     "is_table": screen.get("is_table", False),
@@ -478,7 +480,6 @@ def plugin_result(request):
                         if isinstance(item, list):
                             formatted_screen["content"].append(item)
                         else:
-                            # Split non-list items into lists (adjust as needed)
                             formatted_screen["content"].append(item.split())
                 else:
                     # For non-tables, ensure content is a list of strings
@@ -488,10 +489,14 @@ def plugin_result(request):
                         else:
                             formatted_screen["content"].append(item)
 
-                screens.append(formatted_screen)
+                formatted_screens.append(formatted_screen)
 
-            return JsonResponse({"scan_results": screens})
-            
+            # Return both scan results and logs
+            return JsonResponse({
+                "scan_results": formatted_screens,
+                "logs": logs
+            })
+
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     else:

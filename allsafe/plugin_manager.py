@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import paramiko
+import time
 
 
 PLUGIN_DIR = os.path.join(os.path.dirname(__file__), "../custom_plugins")
@@ -10,46 +11,38 @@ JSON_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "plugin_json")
 
 class PluginManager:
     def __init__(self):
-        self.screens = []  # Store parsed screens for later access
+        self.screens = []
+        self.logs = []  # Store logs here
 
     def execute_plugin_remotely(self, plugin_name, host, username, password):
         """
-        Executes plugin commands remotely.
-        Fully supports multi-line scripts and variables.
+        Executes plugin commands remotely with real-time logging for each screen.
+        Returns structured output with command results.
         """
+        self.logs = []  # Reset logs for each execution
         plugin_filename = f"{plugin_name}.sh"
         plugin_path = os.path.join(PLUGIN_DIR, plugin_filename)
 
         if not os.path.isfile(plugin_path):
-            print(f"Plugin '{plugin_name}' not found locally at {plugin_path}")
-            return {"error": f"Plugin '{plugin_name}' not found locally."}
+            error_msg = f"❌ Plugin '{plugin_name}' not found locally at {plugin_path}"
+            self.logs.append(error_msg)
+            print(error_msg)
+            return {"error": error_msg}
 
+        self.logs.append(f"\n=== Parsing Plugin Locally: {plugin_path} ===\n")
         print(f"\n=== Parsing Plugin Locally: {plugin_path} ===\n")
 
         try:
             with open(plugin_path, "r") as file:
                 raw_script = file.read()
         except Exception as e:
-            print(f"Error reading plugin file: {e}")
+            error_msg = f"❌ Error reading plugin file: {e}"
+            self.logs.append(error_msg)
+            print(error_msg)
             return {"error": "Could not read plugin file"}
 
-        # Parse the plugin structure locally
         self.screens = self.parse_output(raw_script)
 
-        # Extract all commands inside $...$ blocks
-        screen_command_map = []
-        for idx, screen in enumerate(self.screens):
-            if screen.get("commands"):
-                screen_command_map.append({
-                    "screen_index": idx,
-                    "commands": screen["commands"]
-                })
-
-        if not screen_command_map:
-            print("No commands to execute remotely.")
-            return self.screens
-
-        # Connect to remote host
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -57,79 +50,84 @@ class PluginManager:
             ssh.connect(
                 hostname=host,
                 username=username,
-                password=password
+                password=password,
+                timeout=10
             )
         except Exception as e:
-            print(f"SSH connection failed: {e}")
+            error_msg = f"❌ SSH connection failed: {e}"
+            self.logs.append(error_msg)
+            print(error_msg)
             return {"error": "SSH connection failed"}
 
-        print("\n=== Running Commands Remotely ===\n")
+        self.logs.append("\n=== Running Commands Remotely (Real-Time Logs) ===\n")
+        print("\n=== Running Commands Remotely (Real-Time Logs) ===\n")
 
-        # Run each command block and capture output
-        command_outputs = []
-        
-        for screen_info in screen_command_map:
-            # Combine all commands in this screen into one script
-            combined_script = "\n".join(screen_info["commands"])
-            out, err = self.run_remote_shell_script(ssh, combined_script)
+        for screen_idx, screen in enumerate(self.screens):
+            if not screen.get("commands"):
+                continue
 
-            if err:
-                print(f"[Remote Error] {err}")
-                command_outputs.append([f"[ERROR] {err}"])
-            else:
-                # Split output by command (assuming each command produces output)
-                lines = [line.strip() for line in out.splitlines() if line.strip()]
-                command_outputs.append(lines)
-
-        ssh.close()
-
-        # Inject remote output into screens
-        output_index = 0
-        for screen_info in screen_command_map:
-            screen_idx = screen_info["screen_index"]
-            screen = self.screens[screen_idx]
+            screen_log = f"\n📺 Screen {screen_idx + 1}: {screen.get('screen_name', 'Unnamed')}"
+            self.logs.append(screen_log)
+            print(screen_log)
+            
+            combined_script = "\n".join(screen["commands"])
+            cmd_log = f"🚀 Executing {len(screen['commands'])} command(s)..."
+            self.logs.append(cmd_log)
+            print(cmd_log)
+            
+            screen_output = []
+            
+            stdin, stdout, stderr = ssh.exec_command(combined_script, get_pty=True)
+            
+            while True:
+                while stdout.channel.recv_ready():
+                    line = stdout.readline()
+                    if line:
+                        cleaned = line.strip()
+                        out_log = f"[OUT] {cleaned}"
+                        self.logs.append(out_log)
+                        print(out_log)
+                        screen_output.append(cleaned)
+                
+                while stderr.channel.recv_stderr_ready():
+                    line = stderr.readline()
+                    if line:
+                        cleaned = line.strip()
+                        err_log = f"[ERR] {cleaned}"
+                        self.logs.append(err_log)
+                        print(err_log)
+                        screen_output.append(f"ERROR: {cleaned}")
+                
+                if stdout.channel.exit_status_ready():
+                    break
+                
+                time.sleep(0.1)
 
             new_content = []
             for item in screen["content"]:
-                if isinstance(item, str) and item == "$CMD_OUTPUT":
-                    if output_index < len(command_outputs):
-                        for line in command_outputs[output_index]:
-                            new_content.append(line)
-                        output_index += 1
+                if item == "$CMD_OUTPUT":
+                    new_content.extend(screen_output)
                 else:
                     new_content.append(item)
-
             screen["content"] = new_content
 
-        # Remove any 'commands' key from final output
-        for screen in self.screens:
             if "commands" in screen:
                 del screen["commands"]
 
+            complete_log = f"✅ Screen {screen_idx + 1} completed."
+            self.logs.append(complete_log)
+            print(complete_log)
+
+        ssh.close()
+
+        self.logs.append("\n=== Final Parsed Screens ===")
+        print("\n=== Final Parsed Screens ===")
         self.display_screens(self.screens)
-        return self.screens
-
-    def run_remote_shell_script(self, ssh, script):
-        """
-        Improved remote script execution that handles variables and multi-line commands.
-        """
-        # Create a temporary script file with proper bash shebang
-        full_command = f"""cat > /tmp/plugin_script.sh <<'PLUGIN_EOF'
-#!/bin/bash
-{script}
-PLUGIN_EOF
-
-chmod +x /tmp/plugin_script.sh
-# Capture both stdout and stderr
-/tmp/plugin_script.sh 2>&1
-"""
-
-        stdin, stdout, stderr = ssh.exec_command(full_command)
-        out = stdout.read().decode().strip()
-        err = stderr.read().decode().strip()
-
-        return out, err
-
+        
+        return {
+            "screens": self.screens,
+            "logs": self.logs
+        }
     def parse_output(self, raw_output):
         """
         Parses raw plugin output into structured screens.
@@ -196,15 +194,26 @@ chmod +x /tmp/plugin_script.sh
 
     def display_screens(self, screens):
         """
-        Displays parsed screens in terminal.
+        Displays parsed screens in terminal with formatting.
         """
         for index, screen in enumerate(screens):
             print(f"\n=== Screen {index + 1} ===")
-            print(f"Screen Name: {screen['screen_name']}")
+            print(f"Name: {screen['screen_name']}")
+            print(f"Type: {'Table' if screen['is_table'] else 'Standard'}")
+            
             if screen["is_table"]:
-                for row in screen["content"]:
-                    print("\t".join(row) if isinstance(row, list) else row)
+                # Print table with headers
+                headers = screen["content"][0]
+                print("\n" + " | ".join(headers))
+                print("-" * (sum(len(h) for h in headers) + 3 * (len(headers) - 1)))
+                
+                for row in screen["content"][1:]:
+                    if isinstance(row, list):
+                        print(" | ".join(row))
+                    else:
+                        print(row)
             else:
+                # Print standard content
                 for line in screen["content"]:
                     print(line)
 

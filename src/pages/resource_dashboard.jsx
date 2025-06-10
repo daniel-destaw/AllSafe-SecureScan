@@ -59,7 +59,7 @@ const Resource_dashboard = () => {
         script_name: script.name,
         resource_ip: resource.ip_address,
       });
-      return res.data.scan_results;
+      return res.data;
     } catch (error) {
       console.error("Failed to get scan results:", error);
       return null;
@@ -75,7 +75,8 @@ const Resource_dashboard = () => {
       label: `${script.name} (${resource.hostname})`,
       plugin: script,
       resource: resource,
-      results: results,
+      results: results.scan_results,
+      logs: results.logs || [], // Store the execution logs
       pinned: false,
       refreshInterval: 0,
       lastRefreshed: new Date().toISOString()
@@ -133,7 +134,8 @@ const Resource_dashboard = () => {
       prevTabs.map(t =>
         t.id === tabId ? { 
           ...t, 
-          results: results,
+          results: results.scan_results,
+          logs: results.logs || [],
           lastRefreshed: new Date().toISOString()
         } : t
       )
@@ -461,27 +463,25 @@ const Resource_dashboard = () => {
                   )}
                 </div>
 
-                <div className={`${maximizedIndex === null ? "p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "p-0"}`}>
-                  {scanTabs.find(tab => tab.id === activeTab)?.results.map((screen, index) => (
-                    <div
-                      key={index}
-                      className={`bg-white ${maximizedIndex === null ? "border border-gray-200 rounded-lg shadow-sm" : "border-0"} ${
-                        maximizedIndex === null || maximizedIndex === index ? "block" : "hidden"
-                      } ${maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}
-                    >
-                      <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
+                <div className="p-6">
+
+                 {/* Results Section - Now Includes Logs as One of the Screens */}
+                  <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`}>
+                    {/* Add Execution Logs as First Screen Card */}
+                    <div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${maximizedIndex === 'logs' ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}>
+                      <div className={`${maximizedIndex === 'logs' ? "max-w-7xl mx-auto" : ""}`}>
                         <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
                           <h3 className="text-lg font-semibold text-gray-800 flex items-center">
                             <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                             </svg>
-                            {screen.screen_name}
+                            Execution Logs
                           </h3>
                           <button
-                            onClick={() => handleMaximize(index)}
+                            onClick={() => handleMaximize('logs')}
                             className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
                           >
-                            {maximizedIndex === index ? (
+                            {maximizedIndex === 'logs' ? (
                               <>
                                 <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -498,56 +498,110 @@ const Resource_dashboard = () => {
                             )}
                           </button>
                         </div>
-
-                        <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
-                          {screen.is_table ? (
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    {screen.content[0].map((col, idx) => (
-                                      <th
-                                        key={idx}
-                                        scope="col"
-                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                      >
-                                        {col.replace(/"/g, "")}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {screen.content.slice(1).map((row, rowIndex) => (
-                                    <tr key={rowIndex}>
-                                      {typeof row === "string" ? (
-                                        row.split(/\s+/).map((cell, cellIndex) => (
-                                          <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                            {cell}
-                                          </td>
-                                        ))
-                                      ) : (
-                                        row.map((cell, cellIndex) => (
-                                          <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                            {cell.replace(/"/g, "")}
-                                          </td>
-                                        ))
-                                      )}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="bg-gray-50 p-4 rounded-lg">
-                              <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
-                                {screen.content.join("\n")}
-                              </pre>
-                            </div>
-                          )}
+                        <div className={`${maximizedIndex === 'logs' ? "p-4" : "max-h-64 overflow-y-auto p-4"}`}>
+                          <div className="font-mono text-sm bg-black text-gray-200 rounded p-4 overflow-x-auto">
+                            {scanTabs.find(tab => tab.id === activeTab)?.logs.length > 0 ? (
+                              scanTabs.find(tab => tab.id === activeTab)?.logs.map((log, index) => (
+                                <div key={index} className="mb-1">
+                                  <span className="text-green-400">$ </span>
+                                  <span className="text-gray-300">{log}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-gray-400">No execution logs available</div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))}
+
+                    {/* All Other Plugin Result Screens */}
+                    {scanTabs.find(tab => tab.id === activeTab)?.results.map((screen, index) => (
+                      <div
+                        key={index}
+                        className={`bg-white border border-gray-200 rounded-lg shadow-sm ${
+                          maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""
+                        }`}
+                      >
+                        <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
+                          <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {screen.screen_name}
+                            </h3>
+                            <button
+                              onClick={() => handleMaximize(index)}
+                              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                            >
+                              {maximizedIndex === index ? (
+                                <>
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  Close
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                  </svg>
+                                  Expand
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
+                            {screen.is_table ? (
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                  <thead className="bg-gray-50">
+                                    <tr>
+                                      {screen.content[0].map((col, idx) => (
+                                        <th
+                                          key={idx}
+                                          scope="col"
+                                          className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                        >
+                                          {col.replace(/"/g, "")}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white divide-y divide-gray-200">
+                                    {screen.content.slice(1).map((row, rowIndex) => (
+                                      <tr key={rowIndex}>
+                                        {typeof row === "string" ? (
+                                          row.split(/\s+/).map((cell, cellIndex) => (
+                                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                              {cell}
+                                            </td>
+                                          ))
+                                        ) : (
+                                          row.map((cell, cellIndex) => (
+                                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                              {cell.replace(/"/g, "")}
+                                            </td>
+                                          ))
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="bg-gray-50 p-4 rounded-lg">
+                                <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
+                                  {screen.content.join("\n")}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             ) : (

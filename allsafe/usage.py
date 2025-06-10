@@ -1,7 +1,7 @@
 from plugin_manager import PluginManager
 
 manager = PluginManager()
-plugin_name = "LinuxScript_TCP"
+plugin_name = "openportscan"
 
 # Remote execution config
 remote_host = "10.2.10.78"
