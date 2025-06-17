@@ -53,33 +53,58 @@ const Resource_dashboard = () => {
     }
   };
 
-  const fetchPluginResults = async (script, resource) => {
+  const fetchPluginResults = async (script, resource, tabId) => {
     try {
       const res = await axios.post("/api/plugin_result/", {
         script_name: script.name,
         resource_ip: resource.ip_address,
       });
+      
+      // Update the tab with new results
+      setScanTabs(prevTabs =>
+        prevTabs.map(tab =>
+          tab.id === tabId ? { 
+            ...tab, 
+            results: res.data.scan_results,
+            logs: res.data.logs || [],
+            lastRefreshed: new Date().toISOString(),
+            status: 'completed'
+          } : tab
+        )
+      );
+      
       return res.data;
     } catch (error) {
       console.error("Failed to get scan results:", error);
+      
+      // Update tab with error status
+      setScanTabs(prevTabs =>
+        prevTabs.map(tab =>
+          tab.id === tabId ? { 
+            ...tab, 
+            status: 'error',
+            error: error.message
+          } : tab
+        )
+      );
+      
       return null;
     }
   };
 
   const handlePluginSelect = async (script, resource) => {
-    const results = await fetchPluginResults(script, resource);
-    if (!results) return;
-
+    // Create a new tab immediately
     const newTab = {
       id: `${resource.ip_address}-${script.name}-${Date.now()}`,
       label: `${script.name} (${resource.hostname})`,
       plugin: script,
       resource: resource,
-      results: results.scan_results,
-      logs: results.logs || [], // Store the execution logs
+      results: [],
+      logs: ["Initializing scan..."],
       pinned: false,
       refreshInterval: 0,
-      lastRefreshed: new Date().toISOString()
+      lastRefreshed: new Date().toISOString(),
+      status: 'running'
     };
 
     setScanTabs(prevTabs => {
@@ -99,6 +124,9 @@ const Resource_dashboard = () => {
 
     setActiveTab(newTab.id);
     setSelectedTab("scan");
+
+    // Start fetching results in the background
+    fetchPluginResults(script, resource, newTab.id);
   };
 
   const togglePinTab = (tabId, e) => {
@@ -127,19 +155,19 @@ const Resource_dashboard = () => {
     if (tabIndex === -1) return;
 
     const tab = scanTabs[tabIndex];
-    const results = await fetchPluginResults(tab.plugin, tab.resource);
-    if (!results) return;
-
+    
+    // Update status to running
     setScanTabs(prevTabs =>
       prevTabs.map(t =>
         t.id === tabId ? { 
           ...t, 
-          results: results.scan_results,
-          logs: results.logs || [],
-          lastRefreshed: new Date().toISOString()
+          status: 'running',
+          logs: [...t.logs, `Starting refresh at ${new Date().toLocaleTimeString()}...`]
         } : t
       )
     );
+
+    await fetchPluginResults(tab.plugin, tab.resource, tabId);
   };
 
   const closeTab = (tabId, e) => {
@@ -261,6 +289,16 @@ const Resource_dashboard = () => {
                     </svg>
                   )}
                   {tab.label}
+                  {tab.status === 'running' && (
+                    <svg className="w-3 h-3 ml-2 animate-spin text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                  {tab.status === 'error' && (
+                    <svg className="w-3 h-3 ml-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
                   <button 
                     onClick={(e) => closeTab(tab.id, e)}
                     className="ml-2 text-gray-400 hover:text-gray-600"
@@ -421,6 +459,16 @@ const Resource_dashboard = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
                       {scanTabs.find(tab => tab.id === activeTab)?.label}
+                      {scanTabs.find(tab => tab.id === activeTab)?.status === 'running' && (
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                          Running...
+                        </span>
+                      )}
+                      {scanTabs.find(tab => tab.id === activeTab)?.status === 'error' && (
+                        <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                          Error
+                        </span>
+                      )}
                       {scanTabs.find(tab => tab.id === activeTab)?.pinned && (
                         <>
                           <svg 
@@ -449,6 +497,7 @@ const Resource_dashboard = () => {
                     <button
                       onClick={() => refreshTab(activeTab)}
                       className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+                      disabled={scanTabs.find(tab => tab.id === activeTab)?.status === 'running'}
                     >
                       <svg 
                         className="w-4 h-4 mr-1" 
@@ -464,10 +513,9 @@ const Resource_dashboard = () => {
                 </div>
 
                 <div className="p-6">
-
-                 {/* Results Section - Now Includes Logs as One of the Screens */}
+                  {/* Results Section */}
                   <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`}>
-                    {/* Add Execution Logs as First Screen Card */}
+                    {/* Execution Logs Card */}
                     <div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${maximizedIndex === 'logs' ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""}`}>
                       <div className={`${maximizedIndex === 'logs' ? "max-w-7xl mx-auto" : ""}`}>
                         <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
@@ -476,6 +524,11 @@ const Resource_dashboard = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                             </svg>
                             Execution Logs
+                            {scanTabs.find(tab => tab.id === activeTab)?.status === 'running' && (
+                              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                                Live
+                              </span>
+                            )}
                           </h3>
                           <button
                             onClick={() => handleMaximize('logs')}
@@ -510,97 +563,149 @@ const Resource_dashboard = () => {
                             ) : (
                               <div className="text-gray-400">No execution logs available</div>
                             )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* All Other Plugin Result Screens */}
-                    {scanTabs.find(tab => tab.id === activeTab)?.results.map((screen, index) => (
-                      <div
-                        key={index}
-                        className={`bg-white border border-gray-200 rounded-lg shadow-sm ${
-                          maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""
-                        }`}
-                      >
-                        <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
-                          <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
-                            <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                              <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              {screen.screen_name}
-                            </h3>
-                            <button
-                              onClick={() => handleMaximize(index)}
-                              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-                            >
-                              {maximizedIndex === index ? (
-                                <>
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                  Close
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                  </svg>
-                                  Expand
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
-                            {screen.is_table ? (
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                  <thead className="bg-gray-50">
-                                    <tr>
-                                      {screen.content[0].map((col, idx) => (
-                                        <th
-                                          key={idx}
-                                          scope="col"
-                                          className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                        >
-                                          {col.replace(/"/g, "")}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="bg-white divide-y divide-gray-200">
-                                    {screen.content.slice(1).map((row, rowIndex) => (
-                                      <tr key={rowIndex}>
-                                        {typeof row === "string" ? (
-                                          row.split(/\s+/).map((cell, cellIndex) => (
-                                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                              {cell}
-                                            </td>
-                                          ))
-                                        ) : (
-                                          row.map((cell, cellIndex) => (
-                                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                              {cell.replace(/"/g, "")}
-                                            </td>
-                                          ))
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="bg-gray-50 p-4 rounded-lg">
-                                <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
-                                  {screen.content.join("\n")}
-                                </pre>
+                            {scanTabs.find(tab => tab.id === activeTab)?.status === 'running' && (
+                              <div className="flex items-center mt-2">
+                                <div className="animate-pulse flex space-x-2">
+                                  <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                                  <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                                  <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                                </div>
+                                <span className="ml-2 text-gray-400 text-xs">Waiting for more logs...</span>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Results Cards */}
+                    {scanTabs.find(tab => tab.id === activeTab)?.status === 'completed' && (
+                      scanTabs.find(tab => tab.id === activeTab)?.results.map((screen, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white border border-gray-200 rounded-lg shadow-sm ${
+                            maximizedIndex === index ? "fixed inset-0 z-50 overflow-auto p-6 bg-white" : ""
+                          }`}
+                        >
+                          <div className={`${maximizedIndex === index ? "max-w-7xl mx-auto" : ""}`}>
+                            <div className="flex justify-between items-center mb-4 p-4 border-b border-gray-200">
+                              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {screen.screen_name}
+                              </h3>
+                              <button
+                                onClick={() => handleMaximize(index)}
+                                className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                              >
+                                {maximizedIndex === index ? (
+                                  <>
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Close
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    </svg>
+                                    Expand
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <div className={`${maximizedIndex === null ? "max-h-64 overflow-y-auto p-4" : "p-4"}`}>
+                              {screen.is_table ? (
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                      <tr>
+                                        {screen.content[0].map((col, idx) => (
+                                          <th
+                                            key={idx}
+                                            scope="col"
+                                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                          >
+                                            {col.replace(/"/g, "")}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                      {screen.content.slice(1).map((row, rowIndex) => (
+                                        <tr key={rowIndex}>
+                                          {typeof row === "string" ? (
+                                            row.split(/\s+/).map((cell, cellIndex) => (
+                                              <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                                {cell}
+                                              </td>
+                                            ))
+                                          ) : (
+                                            row.map((cell, cellIndex) => (
+                                              <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                                {cell.replace(/"/g, "")}
+                                              </td>
+                                            ))
+                                          )}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                  <pre className="text-sm text-gray-800 font-mono whitespace-pre-wrap overflow-x-auto">
+                                    {screen.content.join("\n")}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {/* Error State */}
+                    {scanTabs.find(tab => tab.id === activeTab)?.status === 'error' && (
+                      <div className="col-span-full bg-red-50 border border-red-200 rounded-lg p-6">
+                        <div className="flex items-center">
+                          <svg className="w-8 h-8 text-red-400 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div>
+                            <h3 className="text-lg font-medium text-red-800">Scan Failed</h3>
+                            <p className="text-red-700 mt-1">
+                              {scanTabs.find(tab => tab.id === activeTab)?.error || "An unknown error occurred while running the scan."}
+                            </p>
+                            <button
+                              onClick={() => refreshTab(activeTab)}
+                              className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                            >
+                              Retry Scan
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Loading State */}
+                    {scanTabs.find(tab => tab.id === activeTab)?.status === 'running' && (
+                      <div className="col-span-full bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <div className="flex items-center">
+                          <svg className="w-8 h-8 text-blue-400 mr-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <div>
+                            <h3 className="text-lg font-medium text-blue-800">Scan in Progress</h3>
+                            <p className="text-blue-700 mt-1">
+                              The scan is currently running. Results will appear here when complete.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
