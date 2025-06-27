@@ -1,6 +1,6 @@
 import {createRoot} from 'react-dom/client';
 import {createInertiaApp} from '@inertiajs/react';
-import Layout from '@/components/Layout.jsx'
+import Layout from '@/components/Layout.jsx';
 import axios from 'axios';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,22 +12,18 @@ document.addEventListener('DOMContentLoaded', () => {
   createInertiaApp({
     title: (title) => `${title} | ${appName}`,
     progress: {
-      // The delay after which the progress bar will appear, in milliseconds...
       delay: 250,
-  
-      // The color of the progress bar...
       color: 'green',
-  
-      // Whether to include the default NProgress styles...
       includeCSS: true,
-  
-      // Whether the NProgress spinner will be shown...
       showSpinner: true,
     },
     resolve: (name) => {
       const pages = import.meta.glob('./pages/**/*.jsx', { eager: true });
       let page = pages[`./pages/${name}.jsx`];
-      page.default.layout = page.default.layout || Layout;
+      // Only set default layout if the page doesn't explicitly opt out
+      if (!page.default.layout && !page.default.isLoginPage) {
+        page.default.layout = Layout;
+      }
       return page;
     },
     setup({ el, App, props }) {

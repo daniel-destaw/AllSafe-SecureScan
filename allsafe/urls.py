@@ -1,13 +1,13 @@
 from django.contrib import admin
 from django.urls import path
 from .views import (
-    index, plugins_handler, resource_dashboard, management, resource, users,
+    login_page, plugins_handler, resource_dashboard, management, resource, users,
     save_resource, get_resources, delete_resource,plugin_result
 )
 from allsafe import views
 
 urlpatterns = [
-    path('', index, name='home'),
+    path('', login_page, name='logins'),
     path('resource_dashboard/', resource_dashboard, name='resource_dashboard'),
     path('management/', management, name='management'),
     path('resource/resource', resource, name='resource'),

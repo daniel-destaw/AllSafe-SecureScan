@@ -51,8 +51,8 @@ def get_hostname(ip, username, password):
         print(f"Error fetching hostname: {str(e)}")
         return None
 
-@inertia('Home/Index')
-def index(request):
+@inertia('logins/login_page')
+def login_page(request):
     return {}
 
 @inertia('resource_dashboard')
